@@ -1,0 +1,1127 @@
+---
+title: "Data Summary - Just an example"
+author: "Whoami"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document: 
+    toc: true # table of content true
+    toc_depth: 6  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+    theme: paper  # many options for theme, this one is my favorite.
+---
+ 
+```{r setup, include=FALSE}
+options(width = 100)
+knitr::opts_chunk$set(echo = TRUE, dev = c('png','pdf'), fig.width= 12, fig.height=8)
+```
+<script>
+function show_hide(ID) {
+    var x = document.getElementById(ID);
+    if (x.style.display === "none") {
+        x.style.display = "block";
+    } else {
+        x.style.display = "none";
+    }
+}
+function hide(ID) {
+    var x = document.getElementById(ID);
+    x.style.display = "none";
+}
+</script>
+
+# Introduction
+<button onclick="show_hide('Introduction')">Show/Hide</button>
+<div id="Introduction"> 
+```{r, echo=FALSE}
+# Remove all the object from memory.
+rm(list=ls())
+```
+
+```{r, echo=FALSE}
+# Define path
+path_Data <- "../Data_Example/FakeData/"
+```
+
+```{r libs ,warning=FALSE,message=FALSE,echo=FALSE}
+# Load some useful packages.
+library(ape)
+library(data.table)
+library(ggmap)
+library(ggplot2)
+library(grid)
+library(Hmisc)
+library(mapdata)
+library(maps)
+library(memisc)
+library(RColorBrewer)
+library(sp)
+library(stringr)
+library(viridis)
+```
+
+```{r, echo=FALSE}
+# Load some functions.
+source("./functions.R")
+```
+
+```{r, echo=FALSE}
+# Load data.
+person         <- readRDS(file.path(path_Data,"person.rds"))
+sequences_meta <- readRDS(file.path(path_Data,"sequences_meta.rds"))
+sequences      <- read.dna(file.path(path_Data,"Sequences.fas"),format="fa")
+
+person <- data.table(person)
+```
+
+Some quantites about the data: 
+```{r, echo=FALSE, collapse=TRUE }
+person <- data.table(person)
+cat( "dim(person) =", dim(person),"\n", sep=" ")        
+cat( "dim(sequences_meta) =", dim(sequences_meta),"\n", sep=" ")      
+cat("\n")
+cat("Are 'person' IDs unique ?\n\t", is.unique(person$newnum),"\n",sep="")
+if(!is.unique(person$newnum))
+ cat("There are ", length(unique(sequences_meta$newnum))," unique IDs.\n",sep="") 
+cat("Are 'sequences_meta' IDs unique ?\n\t", is.unique(sequences_meta$newnum),"\n",sep="")
+if(!is.unique(sequences_meta$newnum))
+ cat("\tThere are ", length(unique(sequences_meta$newnum))," unique IDs.\n",sep="") 
+```
+
+```{r, echo=FALSE, collapse=TRUE, warning=FALSE}
+#### Define constants 
+begin <- 2013
+Washington_counties <- 
+ c("ADAMS CO.","ASOTIN CO.","BENTON CO.","CHELAN CO.","CLALLAM CO.","CLARK CO.",
+   "COLUMBIA CO.","COWLITZ CO.","DOUGLAS CO.","FERRY CO.","FRANKLIN CO.",
+   "GARFIELD CO.","GRANT CO.","GRAYS HARBOR CO.","ISLAND CO." ,"JEFFERSON CO.",
+   "KING CO.","KITSAP CO.","KITTITAS CO.","KLICKITAT CO.", "LEWIS CO.", 
+   "LINCOLN CO.", "MASON CO.", "OKANOGAN CO.", "PACIFIC CO.", "PEND OREILLE CO.",
+   "PIERCE CO." , "SAN JUAN CO.", "SKAGIT CO.","SKAMANIA CO.", "SNOHOMISH CO.",
+   "SPOKANE CO.", "STEVENS CO.", "THURSTON CO.", "WAHKIAKUM CO.", 
+   "WALLA WALLA CO.", "WHATCOM CO.", "WHITMAN CO.", "YAKIMA CO."
+ )
+Washington_counties <- c(
+ Washington_counties,gsub(x=str_to_lower(Washington_counties)," co.","")
+)
+biannual <-
+ c("1980-1982","1983-1984","1985-1986","1987-1988","1989-1990","1991-1992",
+   "1993-1994","1995-1996","1997-1998","1999-2000","2001-2002","2003-2004",
+   "2005-2006","2007-2008","2009-2010","2011-2012","2013-2014","2015-2016",
+   "2017-2018")
+quinquennium <- 
+ c("1980-1984","1984-1988","1989-1993","1994-1998","1999-2003","2004-2008",
+   "2009-2013","2014-2018")
+#### Create new variables ----
+person <- create_new_var(person,sequences_meta,biannual,quinquennium,min_occur=100)
+
+```
+
+```{r, echo=FALSE, collapse=TRUE }
+Table <- table(person$is.USA)
+Table <- rbind(Table,round(prop.table(Table)*100,2))
+rownames(Table) <- c("Count","Percent")
+cat("The proportion of US-born people in the dataset is:\n")
+print(Table)
+```
+
+```{r, echo=FALSE, collapse=TRUE }
+Table <- table(person$hivyr > begin)
+Table <- rbind(Table,round(prop.table(Table)*100,2))
+rownames(Table) <- c("Count","Percent")
+colnames(Table) <- c("Before 2013 (included)","After 2013")
+cat("The proportion of infected people after 2013 is:\n")
+print(Table)
+```
+<button onclick="hide('Introduction')">Hide 'Introduction'</button>
+ </div>
+ 
+# Epidemiology: Washington State 
+<button onclick="show_hide('Epi_WS')">Show/Hide</button>
+<div id="Epi_WS">
+Below, we focus on HIV infected individuals who are either: 
+ 
+* currently living in Washington State,  
+* lived in Washington State during HIV diagnosis or 
+* lived in Washington State during AIDS diagnosis. 
+
+```{r, echo=FALSE, collapse=TRUE }
+person_WS <- person[(rsh_county_name %in% Washington_counties |
+                      rsa_county_name %in% Washington_counties |
+                      cur_county_name %in% Washington_counties),]
+person_KC <- person[(rsh_county_name %in% c("KING CO.","king") | 
+                      rsa_county_name %in% c("KING CO.","king") | 
+                      cur_county_name %in% c("KING CO.","king")),]
+cat("Frequency:",round(nrow(person_WS)/nrow(person) * 100,
+                       2),"% of the dataset.\n",sep=" ")
+cat("Count:",nrow(person_WS) ,"\n",sep=" ")
+cat("King County Frequency in Washington State:",
+    round(nrow(person_WS[(rsh_county_name %in% c("KING CO.","king") |
+                           rsa_county_name %in% c("KING CO.","king") |
+                           cur_county_name %in% c("KING CO.","king")),])/nrow(person_WS) * 100,
+          2),"% \n",sep=" ")
+```
+
+## HIV epidemic over time 
+<button onclick="show_hide('HIV epidemic over time')">Show/Hide</button>
+<div id="HIV epidemic over time"> 
+
+The plot below shows new diagnosis every two years in Washington State.
+
+Mainly, we notice that new diagnosis in MSM population decreases over the time.
+Nevertheless, the foreign MSM population increases until 07-08 and 
+it stays constant until now.
+Next, the heterosexual population slightly decreases and again the foreign 
+subpopulation seems to increase.
+
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- data.table(person_WS)
+dataset <- dataset[hivyr_biann != "",]
+ggbarplot_wrap(dataset,
+               x = "main_transm2", fill = "is.USA", color = "main_transm2", 
+               alpha = "main_transm2", size = "main_transm2", facet_grid = "hivyr_biann", 
+               ylab="Count", slab="Transmission", flab="Region of origin")
+```
+
+Number of people diagnosed with HIV, adjusting for reported deaths.
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- data.table(person_WS)
+dataset <- dataset[hivyr_biann != "",]
+
+function_facet <- function(d,args=args){
+ biannual <- args$biannual
+ d[is.na(d$hivyr), hivyr:= Inf]
+ 
+ ncol_init <- ncol(d)
+ sup_names <- NULL
+ for(b in biannual){
+  y <- as.numeric(strsplit(b,split="-")[[1]])[2]
+  d <- cbind(d, d$hivyr < y & (
+   (d$b_yr < y & d$deathyr == "") | (d$b_yr < y & y < d$deathyr)) )
+  sup_names <- c(sup_names,y)
+ }
+ sup_names <- as.character(sup_names)
+ names(d)[-(1:ncol_init)] <- sup_names
+ 
+ d$deathyr <- NULL
+ d$hivyr   <- NULL
+ d$b_yr    <- NULL
+ 
+ d <- melt(d, id.vars=c("x","fill"),measure.vars=sup_names)
+ return(d)
+}
+ggbarplot_wrap(dataset,
+               x = "main_transm2", fill = "is.USA", color = "main_transm2", 
+               alpha = "main_transm2", size = "main_transm2", facet_grid = "", 
+               var_supp <- c("b_yr","deathyr","hivyr"), args = list(biannual=biannual),
+               Melt=F, function_facet=function_facet, 
+               ylab="Count", slab="Transmission", flab="Region of origin")
+```
+
+Number of people diagnosed with HIV, adjusting for reported deaths.
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- person_WS
+ggline_wrap(person_WS,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="total", color="main_transm2",
+            facet_grid='is.USA',
+            ylab="Number of alived people with HIV",
+            clab="Transmission")
+```
+
+Last five years: Transmissions by ethnicity and origin. 
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_WS[hivyr >= begin,]
+
+ggbarplot_wrap(dataset,
+               x = "main_race", fill = "main_transm2", facet_grid = "is.USA", 
+               slab="Ethnicity", flab="Transmission",
+               position="fill", ylab="Frequency")
+```
+
+Percent of alived people with HIV by county. Only most represented counties are 
+considered.
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- person_WS
+
+ggline_wrap(dataset,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="percent", color="main_transm2",
+            facet_grid='main_cur_county_name',
+            ylab="Percent of alived people with HIV",
+            clab="Transmission")
+```
+
+<button onclick="hide('HIV epidemic over time')">Hide 'HIV epidemic over time'</button>
+</div>
+## Counties map 
+
+### Infected people by county
+<button onclick="show_hide('Infected people by county')">Show/Hide</button>
+<div id="Infected people by county"> 
+
+Birth country.
+```{r, echo=FALSE, collapse=TRUE }
+count <- table(person_WS[,birthCountry2])
+
+ggmap_wrap(map="state",
+           count=count, 
+           legend_lab = "Count")
+```
+           
+Number of people living with HIV and registered by county.
+```{r, echo=FALSE, collapse=TRUE }
+count = table(person_WS[,cur_county_name])
+ggmap_wrap(map="county",
+           count=count, 
+           legend_lab = "Count")
+```
+
+Number of people living with HIV and registered by county.
+```{r, echo=FALSE, collapse=TRUE }
+count= table(person_WS[cur_county_name %in% Washington_counties,cur_county_name])
+ggmap_wrap(map="county",legend_lab = "Count", submap="washington", count= count,
+           text=TRUE)
+```
+
+Number of diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+count=  table(person_WS[hivyr > begin & cur_county_name %in% Washington_counties,cur_county_name])
+ggmap_wrap(map="county",legend_lab = "Count", submap="washington", count= count,
+           text=TRUE)
+```
+<button onclick="hide('Infected people by county')">Hide 'Infected people by county'</button>
+</div> 
+
+### Spatial distribution of new diagnosis in last five years by risk group.
+<button onclick="show_hide('Spatial distribution')">Show/Hide</button>
+<div id="Spatial distribution"> 
+
+Percent of MSM diagnosis the last five years by county.
+```{r, echo=FALSE, collapse=TRUE , message=FALSE,warning=FALSE}
+dataset <- person_WS[hivyr < begin & cur_county_name %in% Washington_counties,
+                     c("main_transm", "cur_county_name")]
+
+tmp  <- table(dataset[main_transm %in% c("MSM","MSM/IDU"), cur_county_name])
+tmp0 <- table(dataset[,cur_county_name])
+
+tmp <- table(person_WS[hivyr < begin & cur_county_name %in% Washington_counties & 
+                        main_transm %in% c("MSM","MSM/IDU"), cur_county_name])
+if(length(tmp) !=  length(tmp0)){
+ tmp2 <- tmp0 
+ tmp2[names(tmp0) %in% names(tmp)] <- tmp
+ tmp2[!(names(tmp0) %in% names(tmp))] <- NA
+ tmp <- tmp2
+}
+count <- tmp / tmp0 * 100
+
+ggmap_wrap(map="county",legend_lab = "Percent", submap="washington", count= count,
+           text=TRUE)
+```
+
+Percent of IDU diagnosis in last five years by county.
+```{r, echo=FALSE, collapse=TRUE ,message=F,warning=FALSE}
+dataset <- person_WS[hivyr < begin & cur_county_name %in% Washington_counties,
+                     c("is.IDU", "cur_county_name")]
+
+tmp0 <- table(dataset[,cur_county_name])
+tmp  <- table(dataset[is.IDU==TRUE , cur_county_name])
+
+if(length(tmp) !=  length(tmp0)){
+ tmp2 <- tmp0 
+ tmp2[names(tmp0) %in% names(tmp)] <- tmp
+ tmp2[!(names(tmp0) %in% names(tmp))] <- NA
+ tmp <- tmp2
+}
+count <- tmp / tmp0 * 100
+
+ggmap_wrap(map="county",legend_lab = "Percent", submap="washington", count= count,
+           text=TRUE)
+```
+
+Percent of US HSX diagnosis in last five years by county.
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warnings=FALSE}
+dataset <- person_WS[ cur_county_name %in% Washington_counties,
+                     c("is.USA","main_transm", "cur_county_name")]
+
+tmp0 <- table(dataset[,cur_county_name])
+tmp  <- table(dataset[is.USA == "USA"  & main_transm == "HETERO" , cur_county_name])
+
+if(length(tmp) !=  length(tmp0)){
+ tmp2 <- tmp0 
+ tmp2[names(tmp0) %in% names(tmp)] <- tmp
+ tmp2[!(names(tmp0) %in% names(tmp))] <- NA
+ tmp <- tmp2
+}
+count <- tmp / tmp0 * 100
+
+ggmap_wrap(map="county",legend_lab = "Percent", submap="washington", count= count,
+           text=TRUE)
+```
+
+Percent of foreign-born HSX diagnosis in last five years by county.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_WS[ cur_county_name %in% Washington_counties,
+                     c("is.USA","main_transm", "cur_county_name")]
+
+tmp0 <- table(dataset[,cur_county_name])
+tmp  <- table(dataset[is.USA == "Foreign"  & main_transm == "HETERO" , cur_county_name])
+
+if(length(tmp) !=  length(tmp0)){
+ tmp2 <- tmp0 
+ tmp2[names(tmp0) %in% names(tmp)] <- tmp
+ tmp2[!(names(tmp0) %in% names(tmp))] <- NA
+ tmp <- tmp2
+}
+count <- tmp / tmp0 * 100
+
+ggmap_wrap(map="county",legend_lab = "Percent", submap="washington", count= count,
+           text=TRUE)
+```
+
+<button onclick="hide('Spatial distribution')">Hide 'Spatial distribution of new diagnosis in last five years by risk group'</button>
+</div> 
+
+## Age at diagnosis
+<button onclick="show_hide('Age')">Show/Hide</button>
+<div id="Age"> 
+
+```{r, echo=FALSE, collapse=TRUE }
+p <- round(prop.table(table(person_WS$main_transm != "OTHER"))* 100 ,2) 
+cat("Proportions of transmissions: \n",
+    "\tMain  transmission: ",p[2],"% \n",
+    "\tOther transmission: ",p[1],"% \n",
+    sep="")
+```
+
+Age at HIV diagnosis.
+```{r, echo=FALSE, collapse=TRUE }
+dp <- subset(person_WS,  
+             select=c(age_diag,main_transm2,is.USA,is.white))
+
+n_fill <- length(unique(dp$is.USA))
+ggplot(dp, aes(x=main_transm2, y=age_diag,fill=is.USA)) + facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Age at HIV diagnosis ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+
+Age at HIV diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+dp <- subset(person_WS,hivyr > begin,  
+             select=c(age_diag,main_transm2,is.USA,is.white))
+
+n_fill <- length(unique(dp$is.USA))
+ggplot(dp, aes(x=main_transm2, y=age_diag,fill=is.USA)) +  facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Age at HIV diagnosis ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+<button onclick="hide('Age')">Hide 'Age at diagnosis'</button>
+</div>
+ 
+
+## ART 
+
+### Years of starting ART 
+<button onclick="show_hide('Years of starting ART')">Show/Hide</button>
+<div id="Years of starting ART"> 
+Year of first ART.
+```{r, echo=FALSE, collapse=TRUE,warning=FALSE,message=FALSE }
+dp <- person_WS[ART == T & !is.na(ART_first_yr),]
+
+n_fill <- length(unique(dp$is.USA))
+ggplot(dp, aes(x=main_transm2, y=ART_first_yr,fill=is.USA)) +  facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Year of first ART ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+
+<button onclick="hide('Years of starting ART')">Hide 'Years of starting ART'</button>
+</div>
+
+### Time for starting ART after diagnosis 
+<button onclick="show_hide('Time for starting ART after diagnosis')">Show/Hide</button>
+<div id="Time for starting ART after diagnosis"> 
+
+Time for starting ART after diagnosis.
+```{r, echo=FALSE, collapse=TRUE,warning=FALSE,message=FALSE }
+dp <- subset(person_WS,ART==TRUE,
+             select=c(time_to_start_ART,is.white,main_transm2,is.USA))
+dp <- dp[!is.na(time_to_start_ART),]
+dp <- dp[time_to_start_ART > 0,]
+
+n_fill <- length(unique(dp$is.USA))
+ggplot(dp, aes(x=main_transm2, y=time_to_start_ART,fill=is.USA)) +  facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ # geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Year of first ART ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+<button onclick="hide('Time for starting ART after diagnosis')">Hide 'Time for starting ART after diagnosis'</button>
+</div>
+
+### The last five years
+<button onclick="show_hide('The last five years')">Show/Hide</button>
+<div id="The last five years"> 
+Only about the person infected the last five years. 
+
+Frequency of people starting ART by origin and ethinicity.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_WS[hivyr > begin,]
+
+ggbarplot_wrap(dataset,x="is.USA",fill="ART",facet_grid="race2",
+               position="fill",ylab="Frequency",slab="Region of origin", 
+               flab="do.ART")
+```
+
+Frequency of people starting ART by age and sexual orientation.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_WS[hivyr > begin,]
+
+ggbarplot_wrap(dataset,x="ageClass",fill="ART",facet_grid="sex2",
+               position="fill",ylab="Frequency",slab="Age", 
+               flab="do.ART")
+```
+
+Cumulative proportion of individuals from King County who started ART, 
+by tranmission and for diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_KC[ART==TRUE & as.numeric(person_KC$hivyr) > begin, ]
+
+ggline_wrap(dataset,
+            x="time_to_start_ART", y="Cumulative percent", color="main_transm2",
+            size="is.USA",facet_grid='',linetype=TRUE,slab="Region of origin", 
+            ylab="Cumulative proportion of individuals who started ART",
+            xlab ="Time for starting ART",clab = "Transmission")
+```
+
+Cumulative proportion of individuals from King County who started ART, by ethnicity
+and for diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_KC[ART==TRUE & as.numeric(person_KC$hivyr) > begin, ]
+
+ggline_wrap(dataset,
+            x="time_to_start_ART", y="Cumulative percent", color="is.white",
+            size="is.USA",facet_grid='',linetype=TRUE,slab="Region of origin", 
+            ylab="Cumulative proportion of individuals who started ART",
+            xlab ="Time for starting ART",clab = "Ethinicity")
+```
+
+
+Cumulative proportion of individuals from King County who started ART, by age
+and for diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_KC[ART==TRUE & as.numeric(person_KC$hivyr) > begin, ]
+
+ggline_wrap(dataset,
+            x="time_to_start_ART", y="Cumulative percent", color="ageClass",
+            size="is.USA",facet_grid='',linetype=TRUE,slab="Region of origin", 
+            ylab="Cumulative proportion of individuals who started ART",
+            xlab ="Time for starting ART",clab = "Age")
+```
+
+Cumulative proportion of individuals from Washington State who started ART, by county
+and for diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_WS[ART==TRUE & as.numeric(person_WS$hivyr) > begin, ]
+
+ggline_wrap(dataset,
+            x="time_to_start_ART", y="Cumulative percent", color="main_cur_county_name",
+            linetype=FALSE,clab = "County",
+            ylab="Cumulative proportion of individuals who started ART",
+            xlab ="Time for starting ART")
+```
+
+Cumulative proportion of individuals from Washington State who started ART, by 
+diagnosis year and for diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_WS[ART==TRUE & as.numeric(person_WS$hivyr) > begin, ]
+
+ggline_wrap(dataset,
+            x="time_to_start_ART", y="Cumulative percent", color="hivyr",
+            linetype=FALSE,clab = "HIV diagnosis",
+            ylab="Cumulative proportion of individuals who started ART",
+            xlab ="Time for starting ART")
+```
+
+<button onclick="hide('The last five years')">Hide 'The last five years'</button>
+</div>
+
+# Epidemiology: King County
+<button onclick="show_hide('Epi_KC')">Show/Hide</button>
+<div id="Epi_KC"> 
+In this Section we consider persons for who King County is the:
+ 
+* residence at HIV diagnosis or 
+* residence at AIDS diagnosis or 
+* current residence.
+
+```{r, echo=FALSE, collapse=TRUE }
+person_KC <- person[(rsh_county_name %in% c("KING CO.","king") | rsa_county_name %in% c("KING CO.","king")
+                     | cur_county_name %in% c("KING CO.","king")),]
+cat("Frequency:",round(nrow(person_KC)/nrow(person) * 100,
+                       2),"% of the dataset. \n",sep=" ")
+cat("Count:",nrow(person_KC) ,"\n",sep=" ")
+```
+
+## HIV epidemic over time 
+<button onclick="show_hide('HIV epidemic over time_KC')">Show/Hide</button>
+<div id="HIV epidemic over time_KC"> 
+
+Number of new diagnosis every two years in King County.
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- person_KC[kc_case & hivyr_biann != "",] 
+ggbarplot_wrap(dataset,
+               x = "main_transm2", fill = "is.USA", color = "main_transm2", 
+               alpha = "main_transm2", size = "main_transm2", facet_grid = "hivyr_biann", 
+               ylab="Count", slab="Transmission", flab="Region of origin")
+```
+
+Number of new diagnosis every two years in the other counties of Washington State.
+```{r, echo=FALSE, collapse=TRUE } 
+if(sum(!person_WS$kc_case)>0){
+dataset <- person_WS[!kc_case & hivyr_biann != "",] 
+ggbarplot_wrap(dataset,
+               x = "main_transm2", fill = "is.USA", color = "main_transm2", 
+               alpha = "main_transm2", size = "main_transm2", facet_grid = "hivyr_biann", 
+               ylab="Count", slab="Transmission", flab="Region of origin")
+}else{
+ cat("There are not non-KC cases in this dataset.\n")
+}
+```
+
+Number of people diagnosed with HIV, adjusting for reported deaths.
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- data.table(person_KC)
+dataset <- dataset[hivyr_biann != "",]
+
+function_facet <- function(d,args=args){
+ biannual <- args$biannual
+ d[is.na(d$hivyr), hivyr:= Inf]
+ 
+ ncol_init <- ncol(d)
+ sup_names <- NULL
+ for(b in biannual){
+  y <- as.numeric(strsplit(b,split="-")[[1]])[2]
+  d <- cbind(d, d$hivyr < y & (
+   (d$b_yr < y & d$deathyr == "") | (d$b_yr < y & y < d$deathyr)) )
+  sup_names <- c(sup_names,y)
+ }
+ sup_names <- as.character(sup_names)
+ names(d)[-(1:ncol_init)] <- sup_names
+ 
+ d$deathyr <- NULL
+ d$hivyr   <- NULL
+ d$b_yr    <- NULL
+ 
+ d <- melt(d, id.vars=c("x","fill"),measure.vars=sup_names)
+ return(d)
+}
+ggbarplot_wrap(dataset,
+               x = "main_transm2", fill = "is.USA", color = "main_transm2", 
+               alpha = "main_transm2", size = "main_transm2", facet_grid = "", 
+               var_supp <- c("b_yr","deathyr","hivyr"), args = list(biannual=biannual),
+               Melt=F, function_facet=function_facet, 
+               ylab="Count", slab="Transmission", flab="Region of origin")
+```
+
+Number of people diagnosed with HIV, adjusting for reported deaths.
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- person_KC
+ggline_wrap(dataset,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="total", color="main_transm2",
+            facet_grid='is.USA',
+            ylab="Number of alived people with HIV",
+            clab="Transmission")
+```
+
+Last five years: Transmissions by ethnicity and origin. 
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_KC[hivyr >= begin,]
+
+ggbarplot_wrap(dataset,
+               x = "main_race", fill = "main_transm2", facet_grid = "is.USA", 
+               slab="Ethnicity", flab="Transmission",
+               position="fill", ylab="Frequency")
+```
+
+Percent of alived people with HIV by county. Only most represented counties are 
+considered.
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- person_WS
+
+ggline_wrap(dataset,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="percent", color="main_transm2",
+            facet_grid='main_cur_county_name',
+            ylab="Percent of alived people with HIV",
+            clab="Transmission")
+```
+
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- person_WS
+
+ggline_wrap(dataset,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="percent", color="main_transm2",
+            facet_grid='kc_case',
+            ylab="Percent of alived people with HIV",
+            clab="Transmission")
+```
+
+<button onclick="hide('HIV epidemic over time_KC')">Hide 'HIV epidemic over time'</button>
+</div>
+## Age at diagnosis
+<button onclick="show_hide('Age_KC')">Show/Hide</button>
+<div id="Age_KC"> 
+
+```{r, echo=FALSE, collapse=TRUE }
+p <- round(prop.table(table(person_KC$main_transm != "OTHER"))* 100 ,2) 
+cat("Proportions of transmissions: \n",
+    "\tMain  transmission: ",p[2],"% \n",
+    "\tOther transmission: ",p[1],"% \n",
+    sep="")
+```
+
+
+Age at HIV diagnosis for US born people.
+```{r, echo=FALSE, collapse=TRUE }
+dp <- subset(person_KC,  is.USA="USA",
+             select=c(age_diag,main_transm2,kc_case,is.white))
+
+n_fill <- length(unique(dp$kc_case))
+ggplot(dp, aes(x=main_transm2, y=age_diag,fill=kc_case)) + facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Age at HIV diagnosis ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+
+Age at HIV diagnosis for migrants.
+```{r, echo=FALSE, collapse=TRUE }
+dp <- subset(person_KC,  is.USA="Foreign",
+             select=c(age_diag,main_transm2,kc_case,is.white))
+
+n_fill <- length(unique(dp$kc_case))
+ggplot(dp, aes(x=main_transm2, y=age_diag,fill=kc_case)) + facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Age at HIV diagnosis ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+
+Age at HIV diagnosis in last five years.
+```{r, echo=FALSE, collapse=TRUE }
+dp <- subset(person_KC,hivyr > begin,  
+             select=c(age_diag,main_transm2,is.USA,is.white))
+
+n_fill <- length(unique(dp$is.USA))
+ggplot(dp, aes(x=main_transm2, y=age_diag,fill=is.USA)) +  facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Age at HIV diagnosis ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+<button onclick="hide('Age_KC')">Hide 'Age at diagnosis'</button>
+</div>
+ 
+
+## ART 
+
+### Years of starting ART 
+<button onclick="show_hide('Years of starting ART_KC')">Show/Hide</button>
+<div id="Years of starting ART_KC"> 
+Year of first ART.
+```{r, echo=FALSE, collapse=TRUE,warning=FALSE,message=FALSE }
+dp <- person_KC[ART == T & !is.na(ART_first_yr),]
+
+n_fill <- length(unique(dp$is.USA))
+ggplot(dp, aes(x=main_transm2, y=ART_first_yr,fill=is.USA)) +  facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Year of first ART ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+
+<button onclick="hide('Years of starting ART_KC')">Hide 'Years of starting ART'</button>
+</div>
+
+### Time for starting ART after diagnosis 
+<button onclick="show_hide('Time for starting ART after diagnosis_KC')">Show/Hide</button>
+<div id="Time for starting ART after diagnosis_KC"> 
+
+Time for starting ART after diagnosis.
+```{r, echo=FALSE, collapse=TRUE,warning=FALSE,message=FALSE }
+dp <- subset(person_KC,ART==TRUE,
+             select=c(time_to_start_ART,is.white,main_transm2,is.USA))
+dp <- dp[!is.na(time_to_start_ART),]
+dp <- dp[time_to_start_ART > 0,]
+
+n_fill <- length(unique(dp$is.USA))
+ggplot(dp, aes(x=main_transm2, y=time_to_start_ART,fill=is.USA)) +  facet_grid(~is.white)+ 
+ geom_violin(position=position_dodge(0.6),trim=FALSE) + 
+ # geom_boxplot(width=0.1,position=position_dodge(0.6)) +
+ xlab("")+
+ ylab("Year of first ART ") +
+ scale_fill_manual(values=rainbow(n_fill))+ labs(fill="Region of origin")
+```
+<button onclick="hide('Time for starting ART after diagnosis_KC')">Hide 'Time for starting ART after diagnosis'</button>
+</div>
+
+### The last five years
+<button onclick="show_hide('The last five years_KC')">Show/Hide</button>
+<div id="The last five years_KC"> 
+Only about the person infected the last five years. 
+
+Frequency of people starting ART by origin and ethinicity.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_KC[hivyr > begin,]
+
+ggbarplot_wrap(dataset,x="is.USA",fill="ART",facet_grid="race2",
+               position="fill",ylab="Frequency",slab="Region of origin", 
+               flab="do.ART")
+```
+
+Frequency of people starting ART by age and sexual orientation.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_KC[hivyr > begin,]
+
+ggbarplot_wrap(dataset,x="ageClass",fill="ART",facet_grid="sex2",
+               position="fill",ylab="Frequency",slab="Age", 
+               flab="do.ART")
+```
+<button onclick="hide('The last five years_KC')">Hide 'The last five years'</button>
+</div>
+
+# Viral RNA sequences
+<button onclick="show_hide('Sequences')">Show/Hide</button>
+<div id="Sequences"> 
+In this section, we investigate who are the people whose viral RNA sequence we have.
+
+```{r, echo=FALSE, collapse=TRUE }
+index <- which(grepl(x=names(sequences),"PR/RT"))
+cat("The viral RNA sequence file contains ",round(length(index)/length(sequences) * 100,2),
+    "% about the PR/RT region.\n",sep="")
+cat("Count: ",length(index)," \n",sep="")
+```
+
+## Sequencing Map 
+<button onclick="show_hide('sequence map')">Show/Hide</button>
+<div id="sequence map">
+
+Number of sequenced person by county in the US.
+```{r, echo=FALSE, collapse=TRUE }
+count <- table(person[matching==TRUE,cur_county_name])
+ggmap_wrap(map="county",
+           count=count,
+           legend_lab = "Count")
+```
+
+Percent of sequenced person by county.
+```{r, echo=FALSE, collapse=TRUE }
+tmp0 <- table(person_KC[cur_county_name %in% Washington_counties,
+                         c(cur_county_name),])
+
+tmp <- table(person_KC[cur_county_name %in% Washington_counties & 
+                            matching , cur_county_name,]) 
+if(length(tmp) !=  length(tmp0)){
+ tmp2 <- tmp0 
+ tmp2[names(tmp0) %in% names(tmp)] <- tmp
+ tmp2[!(names(tmp0) %in% names(tmp))] <- 0
+ tmp <- tmp2
+}
+count <- tmp / tmp0 * 100
+
+ggmap_wrap(map="county",submap="washington",
+           count=count,text=TRUE,
+           legend_lab = "Count")
+```
+
+Percent of sequenced person infected the last five years by county.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person[as.numeric(hivyr) > begin & cur_county_name %in% Washington_counties,]
+tmp0 <- table(dataset[,cur_county_name])
+
+tmp <- table(dataset[ matching==TRUE , cur_county_name]) 
+if(length(tmp) !=  length(tmp0)){
+ tmp2 <- tmp0 
+ tmp2[names(tmp0) %in% names(tmp)] <- tmp
+ tmp2[!(names(tmp0) %in% names(tmp))] <- 0
+ tmp <- tmp2
+}
+count <- tmp / tmp0 * 100
+
+ggmap_wrap(map="county",submap="washington",
+           count=count,text=TRUE,
+           legend_lab = "Count")
+```
+<button onclick="hide('sequence map')">Hide 'Sequencing Map'</button>
+</div>
+ 
+## Sequencing distributions
+<button onclick="show_hide('Sequencing distributions')">Show/Hide</button>
+<div id="Sequencing distributions">
+Sequenced persons by birth country.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person[main_birthCountry != "Unknown"] 
+ggbarplot_wrap(dataset,
+               x="main_birthCountry",
+               y= "matching",
+               ylab="Frequency",
+               Melt=FALSE)
+```
+
+Sequenced persons by ethnicity and origin. (does not work on example data)
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person[race2 != "Unknown"] 
+# ggbarplot_wrap(dataset,
+#                x="race2",
+#                y= "matching",
+#                clab="Region of origin",
+#                color="is.USA",
+#                ylab="Frequency",
+#                Melt=FALSE)
+```
+
+Sequenced persons by transmission and origin.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person[race2 != "Unknown"] 
+ggbarplot_wrap(dataset,
+               x="main_transm2",
+               y= "matching",
+               clab="Region of origin",
+               color="is.USA",
+               ylab="Frequency",
+               Melt=FALSE)
+```
+
+Sequenced persons by age and origin.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person[race2 != "Unknown"] 
+ggbarplot_wrap(dataset,
+               x="ageClass",
+               y= "matching",
+               clab="Region of origin",
+               color="is.USA",
+               ylab="Frequency",
+               Melt=FALSE)
+```
+
+Sequenced persons by ART.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person[!is.na(ART),]
+dataset[,ART :=as.character(ART)]
+dataset[ART=="TRUE" , ART := "do_ART"]
+dataset[ART=="FALSE", ART := "do_not_ART"]
+ggbarplot_wrap(dataset,
+               x="ART",
+               y= "matching",
+               clab="Region of origin",
+               color="is.USA",
+               ylab="Frequency",
+               Melt=FALSE)
+```
+<button onclick="hide('Sequencing distributions')">Hide 'Sequencing distributions'</button>
+</div>
+ 
+## Evolution of sequencing
+<button onclick="show_hide('Evolution of sequencing')">Show/Hide</button>
+<div id="Evolution of sequencing"> 
+ 
+Evolution of sequencing by trasnmission.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person
+ggline_wrap(dataset,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="total", color="main_transm2",
+            size="matching",facet_grid='',linetype=TRUE,slab="Sequenced", 
+            ylab="Number of sequenced person",
+            clab="Transmission")
+```
+
+Evolution of sequencing by ethnicity.
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person
+ggline_wrap(dataset,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="total", color="race2",
+            size="matching",facet_grid='',linetype=TRUE,slab="Sequenced", 
+            ylab="Number of sequenced person",
+            clab="Ethnicity")
+```
+
+<button onclick="hide('Evolution of sequencing')">Hide 'Evolution of sequencing'</button>
+</div>
+
+# Outside Washington State
+<button onclick="show_hide('Outside Washington State')">Show/Hide</button>
+<div id="Outside Washington State"> 
+Below we study persons who have never been registered in Washington State and who 
+are still in the dataset. 
+```{r, echo=FALSE, collapse=TRUE }
+person_nWS <- person[!(rsh_county_name %in% Washington_counties |
+                      rsa_county_name %in% Washington_counties |
+                      cur_county_name %in% Washington_counties),]
+cat("The proportion of US born is: \n")
+Table <- rbind(table(person_nWS$is.USA),round(prop.table(table(person_nWS$is.USA))*100,2))
+rownames(Table) <- c("Count","Percent")
+print(Table)
+```
+
+Current county. 
+```{r, echo=FALSE, collapse=TRUE }
+count = table(person_nWS[cur_county_name != "OTHER",cur_county_name])
+ggmap_wrap(map="county",
+           count=count, 
+           legend_lab = "Count")
+```
+
+```{r, echo=FALSE, collapse=TRUE }
+count <- table(person_nWS[,birthCountry2])
+
+ggmap_wrap(map="state",
+           count=count, 
+           legend_lab = "Count")
+```
+
+Last five years: Transmissions by ethnicity and origin. 
+```{r, echo=FALSE, collapse=TRUE }
+dataset <- person_nWS[hivyr >= begin,]
+
+ggbarplot_wrap(dataset,
+               x = "main_race", fill = "main_transm2", facet_grid = "is.USA", 
+               slab="Ethnicity", flab="Transmission",
+               position="fill", ylab="Frequency")
+```
+
+Number of alived people with HIV
+```{r, echo=FALSE, collapse=TRUE } 
+dataset <- person_nWS
+
+ggline_wrap(dataset,var_supp =c("b_yr","deathyr","hivyr"),
+            x=biannual, y="total", color="main_transm2",
+            facet_grid='is.USA',
+            ylab="Percent of alived people with HIV",
+            clab="Transmission")
+```
+<button onclick="hide('Outside Washington State')">Hide 'Outside Washington State'</button>
+</div>
+
+# Other plots
+<button onclick="show_hide('Other')">Show/Hide</button>
+<div id="Other"> 
+Below, the plots give information about the CD4 and VL counts.
+
+## For all the sample
+<button onclick="show_hide('all')">Show/Hide</button>
+<div id="all"> 
+CD4 count distributions in fonction of time between diagnosis and count.
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+person[first_cd4_yr != "", time_before_first_CD4_test :=
+        as.numeric(first_cd4_yr) - as.numeric(hivyr)]
+person$time_before_first_CD4_test <- as.factor(person$time_before_first_CD4_test)
+person$first_cd4_rnd <- as.numeric(person$first_cd4_rnd)
+
+ggplot(person, aes(x=time_before_first_CD4_test, y=first_cd4_rnd)) + 
+ geom_boxplot()+xlab("Year after HIV diagnosis ")+ylab("First CD4 count")
+```
+
+VL count distributions in fonction of time between diagnosis and count.
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+person$time_before_first_vl_test <- as.factor(person$time_before_first_vl_test)
+person$first_vl_rnd <- as.numeric(person$first_vl_rnd)
+
+ggplot(person, aes(x=time_before_first_vl_test, y=first_vl_rnd)) + 
+ geom_boxplot() +xlab("Year after HIV diagnosis ")+ylab("First VL count")
+```
+
+CD4 count distributions in fonction of time between diagnosis and count.
+(with a zoom to drop extreme values.)
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+ggplot(person, aes(x=time_before_first_vl_test, y=first_vl_rnd)) + 
+ geom_boxplot() + ylim(0,quantile(as.numeric(person$first_vl_rnd),0.80,na.rm=T)) +
+ xlab("Year after HIV diagnosis ")+ylab("First VL count")
+```
+<button onclick="hide('all')">Hide 'For all the sample'</button>
+</div>
+
+## Concerning US-born people
+<button onclick="show_hide('USA')">Show/Hide</button>
+<div id="USA"> 
+
+CD4 and VL counts distributions for US-born people in fonction of time between diagnosis and count.
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+person_USA <- person[birthCountry2 == "USA",]
+
+ggplot(person_USA, aes(x=time_before_first_CD4_test, y=first_cd4_rnd)) + 
+ geom_boxplot() +xlab("Year after HIV diagnosis ")+ylab("First CD4 count")
+ggplot(person_USA, aes(x=time_before_first_vl_test, y=first_vl_rnd)) + 
+ geom_boxplot() +xlab("Year after HIV diagnosis ")+ylab("First VL count") + ylim(0,quantile(as.numeric(person_USA$first_vl_rnd),0.80,na.rm=T)) 
+```
+<button onclick="hide('USA')">Hide 'Concerning US-born people'</button>
+</div>
+
+## Concerning migrants 
+<button onclick="show_hide('migrants')">Show/Hide</button>
+<div id="migrants"> 
+CD4 and VL counts distributions for migrants in fonction of time between diagnosis and count.
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+
+person_nUSA <- person[birthCountry != "USA",]
+
+ggplot(person_nUSA, aes(x=time_before_first_CD4_test, y=first_cd4_rnd)) + 
+ geom_boxplot() +xlab("Year after HIV diagnosis ")+ylab("First CD4 count")
+ggplot(person_nUSA, aes(x=time_before_first_vl_test, y=first_vl_rnd)) + 
+ geom_boxplot() +xlab("Year after HIV diagnosis ")+ylab("First VL count") + ylim(0,quantile(as.numeric(person_nUSA$first_vl_rnd),0.80,na.rm=T)) 
+```
+<button onclick="hide('migrants')">Hide 'Concerning migrants'</button>
+</div>
+
+## VL count after HIV diagnosis
+<button onclick="show_hide('vl')">Show/Hide</button>
+<div id="vl"> 
+Below, the plot give information about people who have a VL count greater than 200
+after HIV diagnosis.
+
+Frequency of ethnicity for these people by age. 
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+dataset <- person[first_vl_rnd > 200 & one_year_after==TRUE,]
+
+ggbarplot_wrap(dataset,
+               x = "ageClass", fill = "race2", facet_grid = "", 
+               slab="Age", flab="Ethnicity",
+               position="fill", ylab="Frequency")
+```
+
+
+Frequency of ethnicity for these people in function of the time between 
+HIV diagnosis and the VL count.
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+dataset <- person[first_vl_rnd > 200 & one_year_after==TRUE & 
+                   !is.na(time_before_first_vl_test),]
+
+ggbarplot_wrap(dataset,
+               x = "time_before_first_vl_test", fill = "race2", facet_grid = "", 
+               slab="remove", flab="Ethnicity",
+               position="fill", ylab="Frequency")
+```
+
+
+Frequency of these people starting ART in function of the time between 
+HIV diagnosis and the VL count.
+```{r, echo=FALSE, collapse=TRUE,message=FALSE,warning=FALSE}
+dataset <- person[first_vl_rnd > 200 & one_year_after==TRUE & 
+                   !is.na(time_before_first_vl_test) & !is.na(ART_before_vl),]
+
+ggbarplot_wrap(dataset,
+               x = "time_before_first_vl_test", fill = "ART_before_vl", facet_grid = "", 
+               slab="remove", flab="Ethnicity",
+               position="fill", ylab="Frequency")
+```
+<button onclick="hide('vl')">Hide 'VL count after diagnosis'</button>
+</div>
